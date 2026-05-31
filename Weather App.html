@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pitchside Weather</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #0b6e35 0%, #0a4d26 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    color: #fff;
+    transition: background 1s ease;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* subtle pitch-stripe overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      90deg,
+      rgba(255,255,255,0.04) 0 60px,
+      rgba(0,0,0,0.04) 60px 120px
+    );
+    z-index: 0;
+  }
+
+  body.sunny   { background: linear-gradient(135deg, #2fa84f 0%, #126b2b 100%); }
+  body.cloudy  { background: linear-gradient(135deg, #556e5a 0%, #2a3d30 100%); }
+  body.rainy   { background: linear-gradient(135deg, #2c4a5e 0%, #14252f 100%); }
+  body.snowy   { background: linear-gradient(135deg, #a8bdb2 0%, #3a4a45 100%); }
+  body.stormy  { background: linear-gradient(135deg, #1a1a1a 0%, #2d1b1b 100%); }
+  body.night   { background: linear-gradient(135deg, #0a1a2f 0%, #0a3d20 100%); }
+
+  .card {
+    position: relative;
+    z-index: 1;
+    background: rgba(10, 40, 20, 0.55);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 24px;
+    padding: 36px 30px 32px;
+    width: 100%;
+    max-width: 440px;
+    text-align: center;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+  }
+
+  .crest {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 6px 16px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 999px;
+    font-size: 0.75rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    opacity: 0.95;
+  }
+
+  .ball {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #fff 0 40%, #ddd 41% 100%);
+    box-shadow: inset -3px -3px 6px rgba(0,0,0,0.35), 0 0 0 1px #000;
+    position: relative;
+    display: inline-block;
+  }
+  .ball::before, .ball::after {
+    content: ''; position: absolute; background: #111;
+  }
+  .ball::before {
+    top: 50%; left: 15%; right: 15%; height: 1.5px; transform: translateY(-50%);
+  }
+  .ball::after {
+    top: 15%; bottom: 15%; left: 50%; width: 1.5px; transform: translateX(-50%);
+  }
+
+  .location {
+    font-size: 2rem;
+    font-weight: 800;
+    margin-bottom: 4px;
+    word-wrap: break-word;
+    letter-spacing: 0.5px;
+  }
+
+  .country {
+    font-size: 1rem;
+    opacity: 0.85;
+    margin-bottom: 22px;
+  }
+
+  .icon {
+    font-size: 5.5rem;
+    margin: 10px 0 4px;
+    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.35));
+  }
+
+  .temp {
+    font-size: 4.4rem;
+    font-weight: 300;
+    margin-bottom: 2px;
+    letter-spacing: -1px;
+  }
+
+  .condition {
+    font-size: 1.15rem;
+    margin-bottom: 18px;
+    opacity: 0.9;
+  }
+
+  .datetime {
+    font-size: 0.85rem;
+    opacity: 0.8;
+    margin-bottom: 14px;
+  }
+
+  .verdict {
+    margin: 18px 0 6px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    text-align: left;
+  }
+
+  .verdict-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  .verdict-rating {
+    font-weight: 800;
+    font-size: 1rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .verdict-score {
+    margin-left: auto;
+    font-size: 0.8rem;
+    opacity: 0.85;
+    background: rgba(0,0,0,0.25);
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+
+  .verdict-msg {
+    font-size: 0.95rem;
+    line-height: 1.4;
+    opacity: 0.95;
+  }
+
+  .verdict.perfect { background: rgba(46, 204, 113, 0.25); border-color: rgba(46,204,113,0.5); }
+  .verdict.good    { background: rgba(241, 196, 15, 0.22); border-color: rgba(241,196,15,0.5); }
+  .verdict.poor    { background: rgba(231, 76, 60, 0.22);  border-color: rgba(231,76,60,0.5); }
+
+  .details {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 16px;
+    padding-top: 18px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .detail { padding: 8px 4px; }
+
+  .detail-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    opacity: 0.75;
+    margin-bottom: 3px;
+    letter-spacing: 1px;
+  }
+
+  .detail-value {
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .unit-toggle {
+    display: inline-flex;
+    gap: 4px;
+    margin-top: 16px;
+    font-size: 0.85rem;
+    opacity: 0.9;
+    background: rgba(0,0,0,0.2);
+    padding: 3px;
+    border-radius: 999px;
+  }
+
+  .unit-toggle span {
+    cursor: pointer;
+    padding: 4px 14px;
+    border-radius: 999px;
+    transition: background 0.2s;
+  }
+
+  .unit-toggle span.active {
+    background: rgba(255, 255, 255, 0.35);
+    font-weight: 700;
+  }
+
+  .status {
+    margin-top: 10px;
+    font-size: 0.85rem;
+    opacity: 0.8;
+    min-height: 20px;
+  }
+
+  button {
+    margin-top: 14px;
+    background: #fff;
+    color: #0a4d26;
+    border: none;
+    padding: 11px 26px;
+    border-radius: 999px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+  }
+
+  button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px rgba(0,0,0,0.3);
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .fade-in { animation: fadeIn 0.6s ease; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .quote {
+    margin-top: 14px;
+    font-size: 0.8rem;
+    font-style: italic;
+    opacity: 0.75;
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+  <div class="card fade-in">
+    <div class="crest"><span class="ball"></span> Pitchside Weather</div>
+
+    <div class="location" id="city">Locating…</div>
+    <div class="country" id="country">&nbsp;</div>
+
+    <div class="icon" id="icon">⛅</div>
+    <div class="temp" id="temp">--°</div>
+    <div class="condition" id="condition">&nbsp;</div>
+    <div class="datetime" id="datetime">&nbsp;</div>
+
+    <div class="verdict" id="verdict" style="display:none;">
+      <div class="verdict-head">
+        <span id="verdict-icon">⚽</span>
+        <span class="verdict-rating" id="verdict-rating">Match Day</span>
+        <span class="verdict-score" id="verdict-score">--/10</span>
+      </div>
+      <div class="verdict-msg" id="verdict-msg"></div>
+    </div>
+
+    <div class="details">
+      <div class="detail">
+        <div class="detail-label">Feels Like</div>
+        <div class="detail-value" id="feels">--°</div>
+      </div>
+      <div class="detail">
+        <div class="detail-label">Humidity</div>
+        <div class="detail-value" id="humidity">--%</div>
+      </div>
+      <div class="detail">
+        <div class="detail-label">Wind</div>
+        <div class="detail-value" id="wind">--</div>
+      </div>
+    </div>
+
+    <div class="unit-toggle">
+      <span id="unit-f" class="active">°F</span>
+      <span id="unit-c">°C</span>
+    </div>
+
+    <div class="quote" id="quote">&nbsp;</div>
+    <div class="status" id="status"><span class="spinner"></span> Warming up…</div>
+    <button id="refresh">Kick Off ⚽</button>
+  </div>
+
+<script>
+  const WMO = {
+    0:  { label: 'Clear sky',            icon: '☀️', cls: 'sunny'  },
+    1:  { label: 'Mainly clear',         icon: '🌤️', cls: 'sunny'  },
+    2:  { label: 'Partly cloudy',        icon: '⛅',  cls: 'sunny'  },
+    3:  { label: 'Overcast',             icon: '☁️', cls: 'cloudy' },
+    45: { label: 'Fog',                  icon: '🌫️', cls: 'cloudy' },
+    48: { label: 'Freezing fog',         icon: '🌫️', cls: 'cloudy' },
+    51: { label: 'Light drizzle',        icon: '🌦️', cls: 'rainy'  },
+    53: { label: 'Drizzle',              icon: '🌦️', cls: 'rainy'  },
+    55: { label: 'Heavy drizzle',        icon: '🌧️', cls: 'rainy'  },
+    56: { label: 'Freezing drizzle',     icon: '🌧️', cls: 'rainy'  },
+    57: { label: 'Freezing drizzle',     icon: '🌧️', cls: 'rainy'  },
+    61: { label: 'Light rain',           icon: '🌦️', cls: 'rainy'  },
+    63: { label: 'Rain',                 icon: '🌧️', cls: 'rainy'  },
+    65: { label: 'Heavy rain',           icon: '🌧️', cls: 'rainy'  },
+    66: { label: 'Freezing rain',        icon: '🌧️', cls: 'rainy'  },
+    67: { label: 'Freezing rain',        icon: '🌧️', cls: 'rainy'  },
+    71: { label: 'Light snow',           icon: '🌨️', cls: 'snowy'  },
+    73: { label: 'Snow',                 icon: '❄️', cls: 'snowy'  },
+    75: { label: 'Heavy snow',           icon: '❄️', cls: 'snowy'  },
+    77: { label: 'Snow grains',          icon: '🌨️', cls: 'snowy'  },
+    80: { label: 'Light rain showers',   icon: '🌦️', cls: 'rainy'  },
+    81: { label: 'Rain showers',         icon: '🌧️', cls: 'rainy'  },
+    82: { label: 'Heavy rain showers',   icon: '🌧️', cls: 'rainy'  },
+    85: { label: 'Snow showers',         icon: '🌨️', cls: 'snowy'  },
+    86: { label: 'Heavy snow showers',   icon: '❄️', cls: 'snowy'  },
+    95: { label: 'Thunderstorm',         icon: '⛈️', cls: 'stormy' },
+    96: { label: 'Thunderstorm w/ hail', icon: '⛈️', cls: 'stormy' },
+    99: { label: 'Thunderstorm w/ hail', icon: '⛈️', cls: 'stormy' }
+  };
+
+  const QUOTES = [
+    '"Some people think football is a matter of life and death… it is much more important than that." — Bill Shankly',
+    '"Football is the ballet of the masses." — Dmitri Shostakovich',
+    '"You have to fight to reach your dream." — Lionel Messi',
+    '"The more difficult the victory, the greater the happiness in winning." — Pelé',
+    '"I learned all about life with a ball at my feet." — Ronaldinho',
+    '"Tactics are important, but without passion you have nothing." — Jürgen Klopp',
+    '"Every disadvantage has its advantage." — Johan Cruyff'
+  ];
+
+  const state = {
+    unit: 'f',
+    tempC: null, feelsC: null, windKmh: null,
+    humidity: null, isDay: 1, code: null
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const cToF = (c) => c * 9 / 5 + 32;
+  const kmhToMph = (k) => k * 0.621371;
+  const setStatus = (m) => $('status').textContent = m;
+
+  function showLocation(city, region, country) {
+    const cityName = city || region || 'Unknown location';
+    const full = [region && region !== city ? region : null, country].filter(Boolean).join(', ');
+    $('city').textContent = cityName;
+    $('country').textContent = full || '';
+  }
+
+  // Match-day playability — scores 0–10 based on temp, wind, and weather code
+  function assessPlayability(code, tempC, windKmh) {
+    let score = 10;
+    const notes = [];
+
+    const tempF = cToF(tempC);
+    if (tempF >= 58 && tempF <= 72) {
+      // sweet spot
+    } else if (tempF >= 45 && tempF <= 82) {
+      score -= 1;
+    } else if (tempF >= 35 && tempF <= 90) {
+      score -= 3;
+      notes.push(tempF > 80 ? "bring water, it's warm out there" : "bundle up, it's a bit chilly");
+    } else {
+      score -= 5;
+      notes.push(tempF > 90 ? 'dangerously hot — hydrate hard' : 'bitter cold, wear layers');
+    }
+
+    if (windKmh > 40) { score -= 4; notes.push('gale-force wind will kill any long ball'); }
+    else if (windKmh > 25) { score -= 2; notes.push('windy — expect some swerving crosses'); }
+    else if (windKmh > 15) { score -= 1; }
+
+    if ([95, 96, 99].includes(code)) {
+      score -= 8; notes.push('thunderstorms — match would be postponed');
+    } else if ([65, 75, 82, 86].includes(code)) {
+      score -= 5; notes.push('heavy precipitation, pitch will be a mess');
+    } else if ([63, 73, 81, 85].includes(code)) {
+      score -= 3; notes.push('steady rain/snow, waterproof boots recommended');
+    } else if ([51, 53, 55, 61, 71, 80].includes(code)) {
+      score -= 1; notes.push('light rain — classic football weather');
+    } else if ([45, 48].includes(code)) {
+      score -= 2; notes.push('fog means you might lose sight of the far wing');
+    }
+
+    score = Math.max(0, Math.min(10, score));
+
+    let rating, icon, cls, intro;
+    if (score >= 8) {
+      rating = 'Perfect Pitch'; icon = '⚽'; cls = 'perfect';
+      intro = 'Absolute belter of a day for football.';
+    } else if (score >= 5) {
+      rating = 'Playable'; icon = '🥅'; cls = 'good';
+      intro = 'Decent conditions — lace the boots up.';
+    } else {
+      rating = 'Poor Conditions'; icon = '🟥'; cls = 'poor';
+      intro = 'Tough shout to play today.';
+    }
+
+    const msg = intro + (notes.length ? ' ' + notes.join('; ') + '.' : '');
+    return { rating, score, icon, cls, msg };
+  }
+
+  function renderWeather() {
+    if (state.code === null) return;
+
+    const info = WMO[state.code] || { label: 'Unknown', icon: '❓', cls: '' };
+    $('icon').textContent = info.icon;
+    $('condition').textContent = info.label;
+
+    const nightish = !state.isDay && [0, 1, 2].includes(state.code);
+    document.body.className = nightish ? 'night' : info.cls;
+
+    if (state.unit === 'f') {
+      $('temp').textContent  = Math.round(cToF(state.tempC))  + '°F';
+      $('feels').textContent = Math.round(cToF(state.feelsC)) + '°F';
+      $('wind').textContent  = Math.round(kmhToMph(state.windKmh)) + ' mph';
+    } else {
+      $('temp').textContent  = Math.round(state.tempC)  + '°C';
+      $('feels').textContent = Math.round(state.feelsC) + '°C';
+      $('wind').textContent  = Math.round(state.windKmh) + ' km/h';
+    }
+    $('humidity').textContent = Math.round(state.humidity) + '%';
+
+    const now = new Date();
+    const options = { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+    $('datetime').textContent = now.toLocaleDateString(undefined, options);
+
+    const v = assessPlayability(state.code, state.tempC, state.windKmh);
+    const verdictEl = $('verdict');
+    verdictEl.style.display = 'block';
+    verdictEl.className = 'verdict ' + v.cls;
+    $('verdict-icon').textContent = v.icon;
+    $('verdict-rating').textContent = v.rating;
+    $('verdict-score').textContent = v.score + '/10';
+    $('verdict-msg').textContent = v.msg;
+
+    $('quote').textContent = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+  }
+
+  async function fetchLocationName(lat, lon) {
+    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Reverse geocoding failed');
+    return res.json();
+  }
+
+  async function fetchWeather(lat, lon) {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+                `&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m` +
+                `&wind_speed_unit=kmh&temperature_unit=celsius`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Weather fetch failed');
+    return res.json();
+  }
+
+  async function loadApp() {
+    setStatus('Warming up…');
+    $('city').textContent = 'Locating…';
+    $('country').textContent = '';
+
+    if (!navigator.geolocation) {
+      setStatus('Geolocation is not supported by this browser.');
+      showLocation('Location unavailable', '', '');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      try {
+        const { latitude, longitude } = pos.coords;
+        setStatus('Checking the pitch…');
+        const [geo, weather] = await Promise.all([
+          fetchLocationName(latitude, longitude),
+          fetchWeather(latitude, longitude)
+        ]);
+
+        const city = geo.city || geo.locality || geo.principalSubdivision;
+        const region = geo.principalSubdivision;
+        const country = geo.countryName;
+        showLocation(city, region, country);
+
+        const c = weather.current;
+        state.tempC    = c.temperature_2m;
+        state.feelsC   = c.apparent_temperature;
+        state.humidity = c.relative_humidity_2m;
+        state.windKmh  = c.wind_speed_10m;
+        state.isDay    = c.is_day;
+        state.code     = c.weather_code;
+
+        renderWeather();
+        setStatus('');
+      } catch (err) {
+        console.error(err);
+        setStatus('Could not load weather. Check your connection and try again.');
+      }
+    }, (err) => {
+      console.warn(err);
+      showLocation('Location denied', '', 'Enable location to see your pitch');
+      setStatus('Location access was blocked.');
+    }, { timeout: 10000 });
+  }
+
+  $('unit-f').addEventListener('click', () => {
+    state.unit = 'f';
+    $('unit-f').classList.add('active');
+    $('unit-c').classList.remove('active');
+    renderWeather();
+  });
+  $('unit-c').addEventListener('click', () => {
+    state.unit = 'c';
+    $('unit-c').classList.add('active');
+    $('unit-f').classList.remove('active');
+    renderWeather();
+  });
+
+  $('refresh').addEventListener('click', loadApp);
+  loadApp();
+</script>
+</body>
+</html>
